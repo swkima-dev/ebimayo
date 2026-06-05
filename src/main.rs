@@ -30,7 +30,7 @@ async fn main() -> Result<(), anyhow::Error> {
         io::stdin()
             .read_line(&mut user_input)
             .expect("std input error");
-        main_memory.push_user(&user_input.as_str());
+        main_memory.push_user(user_input.as_str());
         let messages = main_memory.messages();
         let (prompt, history) = messages.split_last().expect("messages should not be empty");
         let agent = client.agent("claude-sonnet-4-6").build();
