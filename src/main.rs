@@ -1,3 +1,4 @@
+pub mod config;
 pub mod memory;
 pub mod util;
 
@@ -14,9 +15,7 @@ async fn main() -> Result<(), anyhow::Error> {
     const MAX_ITERATIONS: u16 = 1000;
     println!("ebimayo!");
 
-    dotenvy::from_filename(".env.local").ok();
-
-    let api_key = &std::env::var("ANTHROPIC_API_KEY").expect("Key should be found.");
+    let api_key = config::load_anthropic_api_key();
 
     // magic number. refactor it later
     let mut main_memory = memory::ConversationMemory::new(700_000);
