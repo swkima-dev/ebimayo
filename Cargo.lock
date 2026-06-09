@@ -2385,7 +2385,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dotenvy",
+ "glob",
+ "regex",
  "rig",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
