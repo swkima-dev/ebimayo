@@ -1,9 +1,5 @@
-pub mod config;
-pub mod memory;
-pub mod tool;
-pub mod util;
-
-use crate::tool::{glob::Glob, grep::Grep, read::Read};
+use ebimayo::tool::{glob::Glob, grep::Grep, read::Read};
+use ebimayo::{config, memory, util};
 use rig::{
     client::CompletionClient,
     completion::Completion,
