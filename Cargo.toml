@@ -8,3 +8,7 @@ anyhow = "1.0.102"
 dotenvy = "0.15.7"
 rig = "0.38.1"
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+glob = "0.3"
+regex = "1"
