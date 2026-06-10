@@ -1,3 +1,5 @@
+use ebimayo::channels::channel::{Channel, StatusUpdate};
+use ebimayo::channels::cli::CliChannel;
 use ebimayo::tool::{glob::Glob, grep::Grep, read::Read};
 use ebimayo::{config, memory, util};
 use rig::{
@@ -7,13 +9,13 @@ use rig::{
     providers::anthropic::{Client, completion::ANTHROPIC_VERSION_LATEST},
     tool::ToolSet,
 };
-use std::io;
-use std::io::Write;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     const MAX_ITERATIONS: u16 = 1000;
     println!("ebimayo!");
+
+    let channel = CliChannel::new();
 
     let api_key = config::load_anthropic_api_key();
 
@@ -30,13 +32,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .build()?;
 
     for _ in 1..MAX_ITERATIONS {
-        let mut user_input = String::new();
-        print!("User: ");
-        io::stdout().flush().unwrap();
-        io::stdin()
-            .read_line(&mut user_input)
-            .expect("std input error");
-        main_memory.push_user(user_input.as_str());
+        let user_message = channel.receive().await.unwrap();
+        main_memory.push_user(user_message.content.as_str());
         let agent = client
             .agent("claude-sonnet-4-6")
             .tool(Read)
@@ -54,7 +51,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 .await?;
             let response_text = util::extract_text(&response.choice);
 
-            println!("Response: {response_text}");
+            channel
+                .respond(user_message.clone(), &response_text)
+                .await
+                .unwrap();
 
             main_memory.push_assistant(&response);
 
@@ -72,16 +72,16 @@ async fn main() -> Result<(), anyhow::Error> {
                     let name = &tool_call.function.name;
                     let args = &tool_call.function.arguments;
 
-                    let mut user_judge = String::new();
+                    channel
+                        .send_status(StatusUpdate::ApprovalNeeded {
+                            tool_name: name.to_string(),
+                            args: args.to_string(),
+                        })
+                        .await
+                        .unwrap();
 
-                    print!("Tool call {}, {}, Approve?(y/n): ", name, args);
-                    io::stdout().flush().unwrap();
-
-                    user_judge.clear();
-                    io::stdin()
-                        .read_line(&mut user_judge)
-                        .expect("std input error");
-                    if user_judge.trim() == "y" {
+                    let user_judge = channel.receive().await.unwrap();
+                    if user_judge.content.trim() == "y" {
                         let result = main_tools.call(name, args.to_string()).await?;
                         main_memory.push_tool_result(&tool_call.id, result);
                     } else {
