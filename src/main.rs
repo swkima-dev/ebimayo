@@ -9,13 +9,18 @@ use rig::{
     providers::anthropic::{Client, completion::ANTHROPIC_VERSION_LATEST},
     tool::ToolSet,
 };
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let (tx, mut rx) = mpsc::channel(32);
+    let tx_cli = tx.clone();
+
     const MAX_ITERATIONS: u16 = 1000;
     println!("ebimayo!");
 
     let channel = CliChannel::new();
+    channel.start(tx_cli).await;
 
     let api_key = config::load_anthropic_api_key();
 
@@ -31,8 +36,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .anthropic_version(ANTHROPIC_VERSION_LATEST)
         .build()?;
 
-    for _ in 1..MAX_ITERATIONS {
-        let user_message = channel.receive().await.unwrap();
+    while let Some(user_message) = rx.recv().await {
         main_memory.push_user(user_message.content.as_str());
         let agent = client
             .agent("claude-sonnet-4-6")
@@ -41,7 +45,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .tool(Glob)
             .build();
 
-        loop {
+        for _ in 1..MAX_ITERATIONS {
             let messages = main_memory.messages();
             let (prompt, history) = messages.split_last().expect("messages should not be empty");
             let response = agent
@@ -80,7 +84,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         .await
                         .unwrap();
 
-                    let user_judge = channel.receive().await.unwrap();
+                    let user_judge = rx.recv().await.unwrap();
                     if user_judge.content.trim() == "y" {
                         let result = main_tools.call(name, args.to_string()).await?;
                         main_memory.push_tool_result(&tool_call.id, result);
