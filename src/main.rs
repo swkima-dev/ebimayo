@@ -19,7 +19,7 @@ async fn main() -> Result<(), anyhow::Error> {
     const MAX_ITERATIONS: u16 = 1000;
     println!("ebimayo!");
 
-    let channel = CliChannel::new();
+    let channel: Box<dyn Channel> = Box::new(CliChannel::new());
     channel.start(tx_cli).await;
 
     let api_key = config::load_anthropic_api_key();
