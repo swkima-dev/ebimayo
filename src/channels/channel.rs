@@ -1,11 +1,12 @@
 use async_trait::async_trait;
+use thiserror::Error;
 use tokio::sync::mpsc::Sender;
 
 #[async_trait]
 pub trait Channel: Send + Sync {
     fn name(&self) -> &str;
 
-    async fn start(&self, tx: Sender<IncomingMessage>);
+    async fn start(&self, tx: Sender<InboundEvent>);
 
     async fn respond(&self, msg: IncomingMessage, response: &str) -> Result<(), ChannelError>;
 
@@ -16,13 +17,32 @@ pub trait Channel: Send + Sync {
     }
 }
 
-#[derive(Debug)]
-pub enum ChannelError {}
+#[derive(Error, Debug)]
+pub enum ChannelError {
+    #[error("invalid approval")]
+    InvalidApproval,
+}
 
 #[derive(Debug)]
 pub enum StatusUpdate {
     Thinking,
-    ApprovalNeeded { tool_name: String, args: String },
+    ApprovalNeeded {
+        request_id: String,
+        tool_name: String,
+        args: String,
+    },
+    InvalidApproval {
+        request_id: String,
+        approval: bool,
+    },
+    ApprovalExpected {
+        message: String,
+    },
+}
+
+pub enum InboundEvent {
+    UserMessage(IncomingMessage),
+    ApprovalResponse { request_id: String, approved: bool },
 }
 
 #[derive(Debug, Clone)]
