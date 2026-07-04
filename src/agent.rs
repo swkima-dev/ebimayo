@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::channels::channel::{Channel, InboundEvent, IncomingMessage, StatusUpdate};
 use crate::channels::cli::CliChannel;
 use crate::tool::{glob::Glob, grep::Grep, read::Read};
@@ -60,12 +62,15 @@ pub async fn run() -> anyhow::Result<()> {
                 request_id,
                 approved,
             } => {
-                channel
+                if let Err(e) = channel
                     .send_status(StatusUpdate::InvalidApproval {
                         request_id,
                         approval: approved,
                     })
-                    .await?
+                    .await
+                {
+                    let _ = e;
+                }
             }
         }
     }
@@ -111,6 +116,7 @@ async fn agent_loop<M: CompletionModel>(
             break;
         };
 
+        let mut user_message_buf: VecDeque<String> = VecDeque::with_capacity(9);
         for content in response.choice.iter() {
             if let AssistantContent::ToolCall(tool_call) = content {
                 let name = &tool_call.function.name;
@@ -125,34 +131,35 @@ async fn agent_loop<M: CompletionModel>(
                     .await
                     .unwrap();
 
-                let user_judge = rx.recv().await.ok_or_else(|| anyhow!("user judge error"))?;
-                match user_judge {
-                    InboundEvent::UserMessage(msg) => {
-                        channel
-                            .send_status(StatusUpdate::ApprovalExpected {
-                                message: msg.content,
-                            })
-                            .await?;
-                    }
-                    InboundEvent::ApprovalResponse {
-                        request_id,
-                        approved,
-                    } => {
-                        if approved && request_id == tool_call.id {
-                            let result = tools.call(name, args.to_string()).await?;
-                            memory.push_tool_result(&tool_call.id, result);
-                        } else {
-                            memory.push_tool_result(
-                                &tool_call.id,
-                                format!(
-                                    "Tool use was denied by user. Denied tool call: {}, {}",
-                                    name, args
-                                ),
-                            )
+                let (request_id, approved) = loop {
+                    let event = rx.recv().await.ok_or_else(|| anyhow!("user judge error"))?;
+                    match event {
+                        InboundEvent::ApprovalResponse {
+                            request_id,
+                            approved,
+                        } => break (request_id, approved),
+                        InboundEvent::UserMessage(msg) => {
+                            user_message_buf.push_back(msg.content);
                         }
                     }
+                };
+
+                if approved && request_id == tool_call.id {
+                    let result = tools.call(name, args.to_string()).await?;
+                    memory.push_tool_result(&tool_call.id, result);
+                } else {
+                    memory.push_tool_result(
+                        &tool_call.id,
+                        format!(
+                            "Tool use was denied by user. Denied tool call: {}, {}",
+                            name, args
+                        ),
+                    )
                 }
             }
+        }
+        while let Some(message) = user_message_buf.pop_front() {
+            memory.push_user(&message);
         }
     }
 

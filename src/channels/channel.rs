@@ -35,9 +35,6 @@ pub enum StatusUpdate {
         request_id: String,
         approval: bool,
     },
-    ApprovalExpected {
-        message: String,
-    },
 }
 
 pub enum InboundEvent {

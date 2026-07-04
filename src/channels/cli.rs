@@ -124,10 +124,6 @@ impl Channel for CliChannel {
                 eprintln!("Invalid Approval: {} {}", request_id, approval);
                 Err(ChannelError::InvalidApproval)
             }
-            ApprovalExpected { message } => {
-                eprintln!("tool use approval expected but found message {}", message);
-                Err(ChannelError::InvalidApproval)
-            }
         }
     }
 }
