@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use crate::channels::channel::{Channel, InboundEvent, IncomingMessage, StatusUpdate};
 use crate::channels::cli::CliChannel;
+use crate::system_context::SystemContexts;
 use crate::tool::{glob::Glob, grep::Grep, read::Read};
 use crate::{config, memory, util};
 use anyhow::anyhow;
@@ -34,6 +35,8 @@ pub async fn run() -> anyhow::Result<()> {
     main_tools.add_tool(Grep);
     main_tools.add_tool(Glob);
 
+    let system_contexts = SystemContexts::new();
+
     let client = Client::builder()
         .api_key(api_key)
         .anthropic_version(ANTHROPIC_VERSION_LATEST)
@@ -41,6 +44,7 @@ pub async fn run() -> anyhow::Result<()> {
 
     let agent = client
         .agent("claude-sonnet-4-6")
+        .preamble(&system_contexts.prompt())
         .tool(Read)
         .tool(Grep)
         .tool(Glob)
