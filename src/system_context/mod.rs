@@ -48,3 +48,9 @@ impl SystemContexts {
             .find(|path| path.exists())
     }
 }
+
+impl Default for SystemContexts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
