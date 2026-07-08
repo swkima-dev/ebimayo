@@ -2391,6 +2391,7 @@ dependencies = [
  "rig",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
 ]
 
