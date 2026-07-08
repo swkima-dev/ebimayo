@@ -163,5 +163,9 @@ async fn agent_loop<M: CompletionModel>(
         }
     }
 
+    channel
+        .turn_complete()
+        .await
+        .expect("should not fail to complete");
     Ok(())
 }

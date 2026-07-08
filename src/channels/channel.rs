@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Sender;
@@ -15,6 +16,8 @@ pub trait Channel: Send + Sync {
     async fn shutdown(&self) -> Result<(), ChannelError> {
         Ok(())
     }
+
+    async fn turn_complete(&self) -> Result<(), ChannelError>;
 }
 
 #[derive(Error, Debug)]

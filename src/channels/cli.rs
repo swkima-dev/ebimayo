@@ -1,9 +1,9 @@
 use std::io::Write;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::{io, sync::Arc};
 
+use anyhow::Result;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
@@ -12,8 +12,14 @@ use crate::channels::channel::{
 };
 
 pub struct CliChannel {
-    stdin_locked: Arc<AtomicBool>,
-    wating_approval: Arc<Mutex<Option<String>>>,
+    state: Arc<Mutex<ReadState>>,
+}
+
+#[derive(Debug)]
+enum ReadState {
+    Locked,
+    AwaitingMessage,
+    AwaitingApproval(String),
 }
 
 #[async_trait]
@@ -23,22 +29,24 @@ impl Channel for CliChannel {
     }
 
     async fn start(&self, tx: mpsc::Sender<InboundEvent>) {
-        let stdin_locked = Arc::clone(&self.stdin_locked);
-        let waiting_approval = self.wating_approval.clone();
+        let state = Arc::clone(&self.state);
 
         std::thread::spawn(move || {
             loop {
                 let mut user_input = String::new();
-                while stdin_locked.load(Ordering::Relaxed) {
+
+                while matches!(*state.lock().unwrap(), ReadState::Locked) {
                     std::thread::sleep(Duration::from_millis(50));
                 }
 
                 let msg: InboundEvent;
 
                 {
-                    let approval_needed = waiting_approval.lock().unwrap().clone();
-                    match approval_needed {
-                        Some(id) => {
+                    let mut state_guard = state.lock().unwrap();
+                    let current = std::mem::replace(&mut *state_guard, ReadState::Locked);
+                    drop(state_guard);
+                    match current {
+                        ReadState::AwaitingApproval(id) => {
                             println!("Approve?(y/n): ");
                             io::stdout().flush().unwrap();
                             match io::stdin().read_line(&mut user_input) {
@@ -49,22 +57,15 @@ impl Channel for CliChannel {
                                     break;
                                 }
                             }
-                            stdin_locked.store(true, Ordering::Relaxed);
 
-                            let approved: bool;
-
-                            if user_input.trim() == "y" {
-                                approved = true;
-                            } else {
-                                approved = false;
-                            }
+                            let approved = user_input.trim() == "y";
 
                             msg = InboundEvent::ApprovalResponse {
                                 request_id: id,
-                                approved: approved,
+                                approved,
                             };
                         }
-                        None => {
+                        ReadState::AwaitingMessage => {
                             print!("User: ");
                             io::stdout().flush().unwrap();
                             match io::stdin().read_line(&mut user_input) {
@@ -75,18 +76,15 @@ impl Channel for CliChannel {
                                     break;
                                 }
                             }
-                            stdin_locked.store(true, Ordering::Relaxed);
 
                             msg = InboundEvent::UserMessage(IncomingMessage {
                                 content: user_input,
                                 channel_type: ChannelType::Cli,
                             });
                         }
+                        ReadState::Locked => unreachable!(),
                     }
                 }
-
-                let mut approval_needed = waiting_approval.lock().unwrap();
-                *approval_needed = None;
 
                 tx.blocking_send(msg).unwrap();
             }
@@ -95,8 +93,6 @@ impl Channel for CliChannel {
 
     async fn respond(&self, _msg: IncomingMessage, response: &str) -> Result<(), ChannelError> {
         println!("{}", response);
-        let stdin_locked = Arc::clone(&self.stdin_locked);
-        stdin_locked.store(false, Ordering::Relaxed);
         Ok(())
     }
 
@@ -113,8 +109,8 @@ impl Channel for CliChannel {
                 args,
             } => {
                 println!("Tool call {}, {}", tool_name, args);
-                let mut requested_id = self.wating_approval.lock().unwrap();
-                *requested_id = Some(request_id);
+
+                *self.state.lock().unwrap() = ReadState::AwaitingApproval(request_id);
                 Ok(())
             }
             InvalidApproval {
@@ -126,13 +122,17 @@ impl Channel for CliChannel {
             }
         }
     }
+
+    async fn turn_complete(&self) -> Result<(), ChannelError> {
+        *self.state.lock().unwrap() = ReadState::AwaitingMessage;
+        Ok(())
+    }
 }
 
 impl CliChannel {
     pub fn new() -> Self {
         Self {
-            stdin_locked: Arc::new(AtomicBool::new(false)),
-            wating_approval: Arc::new(Mutex::new(None)),
+            state: Arc::new(Mutex::new(ReadState::AwaitingMessage)),
         }
     }
 }
