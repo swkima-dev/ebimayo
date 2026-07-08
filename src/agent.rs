@@ -102,8 +102,7 @@ async fn agent_loop<M: CompletionModel>(
 
         channel
             .respond(user_message.clone(), &response_text)
-            .await
-            .unwrap();
+            .await?;
 
         memory.push_assistant(&response);
 
@@ -128,8 +127,7 @@ async fn agent_loop<M: CompletionModel>(
                         tool_name: name.to_string(),
                         args: args.to_string(),
                     })
-                    .await
-                    .unwrap();
+                    .await?;
 
                 let (request_id, approved) = loop {
                     let event = rx.recv().await.ok_or_else(|| anyhow!("user judge error"))?;
@@ -163,9 +161,6 @@ async fn agent_loop<M: CompletionModel>(
         }
     }
 
-    channel
-        .turn_complete()
-        .await
-        .expect("should not fail to complete");
+    channel.turn_complete().await?;
     Ok(())
 }

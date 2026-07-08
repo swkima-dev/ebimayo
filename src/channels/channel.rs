@@ -17,7 +17,9 @@ pub trait Channel: Send + Sync {
         Ok(())
     }
 
-    async fn turn_complete(&self) -> Result<(), ChannelError>;
+    async fn turn_complete(&self) -> Result<(), ChannelError> {
+        Ok(())
+    }
 }
 
 #[derive(Error, Debug)]
