@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::channels::channel::{Channel, InboundEvent, IncomingMessage, StatusUpdate};
 use crate::channels::cli::CliChannel;
 use crate::system_context::SystemContexts;
-use crate::tool::{glob::Glob, grep::Grep, read::Read};
+use crate::tool::{bash::Bash, glob::Glob, grep::Grep, read::Read, write::FullWrite};
 use crate::{config, memory, util};
 use anyhow::anyhow;
 use rig::agent::Agent;
@@ -45,9 +45,11 @@ pub async fn run() -> anyhow::Result<()> {
     let agent = client
         .agent("claude-sonnet-4-6")
         .preamble(&system_contexts.prompt())
+        .tool(Bash)
         .tool(Read)
         .tool(Grep)
         .tool(Glob)
+        .tool(FullWrite)
         .build();
     while let Some(user_message) = rx.recv().await {
         match user_message {
