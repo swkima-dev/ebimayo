@@ -36,8 +36,8 @@ impl SystemContexts {
         let mut skills_result: Vec<SkillMetaData> = Vec::new();
         let mut base_dir: Vec<PathBuf> = vec![self.workspace_dir.clone()];
 
-        if user_level_dir.is_some() {
-            base_dir.push(user_level_dir.unwrap());
+        if let Some(path) = user_level_dir {
+            base_dir.push(path);
         }
 
         for dir in base_dir {

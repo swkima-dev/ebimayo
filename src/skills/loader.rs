@@ -76,13 +76,12 @@ pub fn parse_skill_metadata(
 pub fn find_skills_path(target: PathBuf) -> Vec<PathBuf> {
     let mut result: Vec<PathBuf> = Vec::new();
     for entry in WalkDir::new(target).max_depth(2) {
-        if let Ok(element) = entry {
-            if element.file_type().is_file()
+        if let Ok(element) = entry
+            && element.file_type().is_file()
                 && element.clone().into_path().file_name() == Some(OsStr::new("SKILL.md"))
             {
                 result.push(element.into_path());
             }
-        }
     }
     result
 }
