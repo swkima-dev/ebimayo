@@ -35,7 +35,7 @@ pub async fn run() -> anyhow::Result<()> {
     main_tools.add_tool(Grep);
     main_tools.add_tool(Glob);
 
-    let system_contexts = SystemContexts::new();
+    let mut system_contexts = SystemContexts::new();
 
     let client = Client::builder()
         .api_key(api_key)
@@ -44,7 +44,7 @@ pub async fn run() -> anyhow::Result<()> {
 
     let agent = client
         .agent("claude-sonnet-4-6")
-        .preamble(&system_contexts.prompt())
+        .preamble(&system_contexts.reload_skills().prompt())
         .tool(Bash)
         .tool(Read)
         .tool(Grep)
