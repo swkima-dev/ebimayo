@@ -1,3 +1,5 @@
 /target
 # Local environment variables
 .env.local
+.ebimayo/
+.agents/
