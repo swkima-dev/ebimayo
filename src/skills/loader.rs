@@ -78,10 +78,10 @@ pub fn find_skills_path(target: PathBuf) -> Vec<PathBuf> {
     for entry in WalkDir::new(target).max_depth(2) {
         if let Ok(element) = entry
             && element.file_type().is_file()
-                && element.clone().into_path().file_name() == Some(OsStr::new("SKILL.md"))
-            {
-                result.push(element.into_path());
-            }
+            && element.clone().into_path().file_name() == Some(OsStr::new("SKILL.md"))
+        {
+            result.push(element.into_path());
+        }
     }
     result
 }
@@ -90,13 +90,18 @@ pub fn load_skills(target_dir: PathBuf) -> Vec<SkillMetaData> {
     let mut loaded_skills: Vec<SkillMetaData> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for skill_md_path in find_skills_path(target_dir) {
-        let parsed_metadata = parse_skill_metadata(skill_md_path);
+        let parsed_metadata = parse_skill_metadata(skill_md_path.clone());
         let metadata = match parsed_metadata {
-            Ok((metadata, _)) => metadata, // In the future, the warning content should be displayed to the user.
-            Err(_) => {
+            Ok((metadata, warn)) => {
+                if let Some(w) = warn {
+                    eprintln!("warning skill:{:?} {}", skill_md_path, w);
+                }
+                metadata
+            } // In the future, warnings regarding skill loading should be displayed to users via channels.
+            Err(e) => {
+                eprintln!("skiped skill {:?} : {}", &skill_md_path, e);
                 continue;
-                // In the future, error details should be logged.
-            }
+            } // In the future, errors related to skill loading should be logged.
         };
 
         if seen.insert(metadata.name.clone()) {
