@@ -35,6 +35,8 @@ impl SystemContexts {
         let user_level_dir = std::env::home_dir();
         let mut skills_result: Vec<SkillMetaData> = Vec::new();
         let mut base_dir: Vec<PathBuf> = vec![self.workspace_dir.clone()];
+        // TODO: Consider gating project-level skill loading on a trust check because project-level skills may be include prompt injection
+        // see https://agentskills.io/client-implementation/adding-skills-support#trust-considerations
 
         if let Some(path) = user_level_dir {
             base_dir.push(path);
