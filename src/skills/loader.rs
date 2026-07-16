@@ -99,7 +99,7 @@ pub fn load_skills(target_dir: PathBuf) -> Vec<SkillMetaData> {
                 metadata
             } // In the future, warnings regarding skill loading should be displayed to users via channels.
             Err(e) => {
-                eprintln!("skiped skill {:?} : {}", &skill_md_path, e);
+                eprintln!("skiped skill {:?} : {}", skill_md_path, e);
                 continue;
             } // In the future, errors related to skill loading should be logged.
         };
