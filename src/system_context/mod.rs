@@ -62,7 +62,7 @@ impl SystemContexts {
 
         for skill in self.skills.iter() {
             catalog.push_str(&format!("  <skill>    <name>{}</name>\n    <description>{}</description>\n    <location>{}</location>\n  </skill>\n",
-                    skill.name, skill.description, skill.path_to_skills_md.to_str().unwrap()));
+                    escape_html(&skill.name), escape_html(&skill.description), skill.path_to_skills_md.to_str().unwrap()));
         }
         catalog.push_str("</available_skills>");
         catalog
@@ -113,4 +113,21 @@ impl Default for SystemContexts {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn escape_html(text: &str) -> String {
+    let mut escaped_text = String::new();
+
+    for ch in text.chars() {
+        match ch {
+            '&' => escaped_text.push_str("&amp;"),
+            '<' => escaped_text.push_str("&lt;"),
+            '>' => escaped_text.push_str("&gt;"),
+            '"' => escaped_text.push_str("&quot;"),
+            '\'' => escaped_text.push_str("&#39;"),
+            _ => escaped_text.push(ch),
+        }
+    }
+
+    escaped_text
 }
