@@ -1,11 +1,16 @@
 use serde::Deserialize;
-use std::{collections::HashSet, ffi::OsStr, fs, path::PathBuf};
+use std::{
+    collections::HashSet,
+    ffi::OsStr,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use walkdir::WalkDir;
 
 use crate::skills::model::{SkillError, SkillMetaData, SkillWarning};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct SkillFrontmatter {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -34,32 +39,39 @@ fn extract_frontmatter(contents: &str) -> Option<String> {
     Some(frontmatter_lines.join("\n"))
 }
 
-pub fn parse_skill_metadata(
-    skill_md_path: PathBuf,
-) -> Result<(SkillMetaData, Option<SkillWarning>), SkillError> {
-    let content = match fs::read_to_string(&skill_md_path) {
+pub fn parse_skill_frontmatter(skill_md_path: &Path) -> Result<SkillFrontmatter, SkillError> {
+    let content = match fs::read_to_string(skill_md_path) {
         Ok(content) => content,
         Err(e) => return Err(SkillError::IoError(e)),
     };
-    let frontmatter = extract_frontmatter(&content).ok_or(SkillError::MissingFrontmatter)?;
-
-    let parsed: SkillFrontmatter = match yaml_serde::from_str(&frontmatter) {
-        Ok(parsed) => parsed,
+    let frontmatter_text = extract_frontmatter(&content).ok_or(SkillError::MissingFrontmatter)?;
+    let frontmatter: SkillFrontmatter = match yaml_serde::from_str(&frontmatter_text) {
+        Ok(deserialized) => deserialized,
         Err(_) => return Err(SkillError::InvalidYaml),
     };
-    let name = parsed.name.ok_or(SkillError::EmptyName)?;
+    Ok(frontmatter)
+}
+
+pub fn build_skill_metadata(
+    frontmatter: SkillFrontmatter,
+    skill_md_path: &Path,
+) -> Result<(SkillMetaData, Option<SkillWarning>), SkillError> {
+    let name = frontmatter.name.ok_or(SkillError::EmptyName)?;
     if name.trim().is_empty() {
         return Err(SkillError::EmptyName);
     }
-    let description = parsed.description.ok_or(SkillError::EmptyDescription)?;
+    let description = frontmatter
+        .description
+        .ok_or(SkillError::EmptyDescription)?;
     if description.trim().is_empty() {
         return Err(SkillError::EmptyDescription);
     }
 
     let mut warn: Option<SkillWarning> = None;
+    let dir_name = skill_md_path.parent().and_then(Path::file_name);
     if name.chars().count() > 64 {
         warn = Some(SkillWarning::TooLongName);
-    } else if OsStr::new(name.trim()) != skill_md_path.parent().unwrap().file_name().unwrap() {
+    } else if dir_name.is_some_and(|dir| dir != OsStr::new(name.trim())) {
         warn = Some(SkillWarning::MismatchedDirectoryName);
     }
 
@@ -67,7 +79,7 @@ pub fn parse_skill_metadata(
         SkillMetaData {
             name,
             description,
-            path_to_skills_md: skill_md_path,
+            path_to_skills_md: skill_md_path.into(),
         },
         warn,
     ))
@@ -90,8 +102,15 @@ pub fn load_skills(target_dir: PathBuf) -> Vec<SkillMetaData> {
     let mut loaded_skills: Vec<SkillMetaData> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for skill_md_path in find_skills_path(target_dir) {
-        let parsed_metadata = parse_skill_metadata(skill_md_path.clone());
-        let metadata = match parsed_metadata {
+        let frontmatter = match parse_skill_frontmatter(&skill_md_path) {
+            Ok(frontmatter) => frontmatter,
+            Err(e) => {
+                eprintln!("warning skill:{:?} {}", skill_md_path, e);
+                continue;
+            }
+        }; // In the future, errors related to skill loading should be logged.
+
+        let metadata = match build_skill_metadata(frontmatter, &skill_md_path) {
             Ok((metadata, warn)) => {
                 if let Some(w) = warn {
                     eprintln!("warning skill:{:?} {}", skill_md_path, w);
@@ -119,7 +138,10 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use crate::skills::{
-        loader::{extract_frontmatter, find_skills_path, load_skills, parse_skill_metadata},
+        loader::{
+            SkillFrontmatter, build_skill_metadata, extract_frontmatter, find_skills_path,
+            load_skills, parse_skill_frontmatter,
+        },
         model::{SkillError, SkillMetaData, SkillWarning},
     };
 
@@ -153,10 +175,30 @@ description: A agent skill for test.";
     }
 
     #[test]
-    fn success_parse_skill_metadata() {
+    fn success_parse_skill_frontmatter() {
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base.push("tests/inputs/agent_skills/my-skill-a/SKILL.md");
 
+        let expected = SkillFrontmatter {
+            name: Some(String::from("my-skill-a")),
+            description: Some(String::from("A agent skill for test.")),
+        };
+
+        let result = parse_skill_frontmatter(&base);
+
+        assert!(result.is_ok());
+        assert_eq!(expected, result.unwrap());
+    }
+
+    #[test]
+    fn success_build_skill_metadata() {
+        let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        base.push("tests/inputs/agent_skills/my-skill-a/SKILL.md");
+
+        let frontmatter = SkillFrontmatter {
+            name: Some(String::from("my-skill-a")),
+            description: Some(String::from("A agent skill for test.")),
+        };
         let expected = (
             SkillMetaData {
                 name: "my-skill-a".to_string(),
@@ -166,15 +208,16 @@ description: A agent skill for test.";
             None::<SkillWarning>,
         );
 
-        assert_eq!(expected, parse_skill_metadata(base).unwrap());
+        assert_eq!(expected, build_skill_metadata(frontmatter, &base).unwrap());
     }
 
     #[test]
-    fn empty_description_parse_skill_metadata() {
+    fn empty_description_build_skill_metadata() {
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base.push("tests/inputs/agent_skills/my-skill-b/SKILL.md");
 
-        let result = parse_skill_metadata(base);
+        let frontmatter = parse_skill_frontmatter(&base).unwrap();
+        let result = build_skill_metadata(frontmatter, &base);
 
         assert!(matches!(result, Err(SkillError::EmptyDescription)));
     }
